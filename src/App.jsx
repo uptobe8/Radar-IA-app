@@ -11,8 +11,7 @@ function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <BrowserRouter>
-          <Routes>
+        <BrowserRouter basename="/Radar-IA-app">          <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/trends" element={<TrendAnalysis />} />
             <Route path="/insights" element={<InsightsView />} />
