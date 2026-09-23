@@ -1,0 +1,102 @@
+name: E2E live app
+
+on:
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Test live app on mobile
+        env:
+          APP_URL: https://uptobe8.github.io/Radar-IA-app/
+        run: |
+          node --input-type=module <<'EOF'
+          import { chromium } from 'playwright'
+
+          const browser = await chromium.launch({ headless: true })
+          const context = await browser.newContext({
+            viewport: { width: 390, height: 844 },
+            isMobile: true,
+            hasTouch: true,
+            deviceScaleFactor: 3,
+            locale: 'es-ES'
+          })
+          const page = await context.newPage()
+          const pageErrors = []
+          page.on('pageerror', e => pageErrors.push(String(e)))
+
+          await page.goto(process.env.APP_URL, { waitUntil: 'networkidle', timeout: 120000 })
+          await page.evaluate(() => localStorage.clear())
+          await page.reload({ waitUntil: 'networkidle', timeout: 120000 })
+
+          const text = await page.locator('body').innerText()
+          if (!text.includes('RADAR CERO')) throw new Error('No aparece RADAR CERO')
+          if (!text.includes('Nuevo estudio')) throw new Error('No aparece el formulario Nuevo estudio')
+
+          await page.getByLabel('Nombre', { exact: true }).fill('Juan')
+          await page.getByLabel('Primer apellido', { exact: true }).fill('García')
+          await page.getByLabel('Segundo apellido', { exact: true }).fill('López')
+          await page.getByLabel('Nacimiento aproximado', { exact: true }).fill('1888')
+          await page.getByLabel('Municipio', { exact: true }).fill('Toledo')
+          await page.getByLabel('Provincia', { exact: true }).fill('Toledo')
+          await page.getByRole('button', { name: 'Crear estudio e iniciar expediente' }).click()
+
+          await page.getByText('Estudio · Juan García López', { exact: true }).first().waitFor({ timeout: 10000 })
+          await page.getByRole('button', { name: 'Investigar ahora' }).click()
+          await page.getByText('INFORME DE INVESTIGACIÓN', { exact: true }).waitFor({ timeout: 240000 })
+
+          const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('radar-cero-studies-v4') || '[]'))
+          if (!stored.length) throw new Error('El estudio no se guardó en localStorage')
+          const study = stored[0]
+          if (study.status !== 'completed') throw new Error(`Estado inesperado: ${study.status}`)
+          if (!Array.isArray(study.runs) || study.runs.length === 0) throw new Error('La investigación no registró ejecuciones de fuentes')
+          if (!study.lastConclusion) throw new Error('No se generó conclusión')
+
+          const layout = await page.evaluate(() => ({
+            scrollWidth: document.documentElement.scrollWidth,
+            innerWidth: window.innerWidth
+          }))
+          if (layout.scrollWidth > layout.innerWidth + 1) {
+            throw new Error(`Desbordamiento horizontal móvil: ${layout.scrollWidth}px > ${layout.innerWidth}px`)
+          }
+
+          if (pageErrors.length) throw new Error(`Errores JavaScript: ${pageErrors.join(' | ')}`)
+
+          console.log('E2E_OK')
+          console.log(JSON.stringify({
+            status: study.status,
+            runs: study.runs.length,
+            evidence: study.evidence?.length || 0,
+            people: study.people?.length || 0,
+            relations: study.relations?.length || 0,
+            conclusion: study.lastConclusion,
+            viewport: layout
+          }, null, 2))
+
+          page.on('dialog', dialog => dialog.accept())
+          await page.getByRole('button', { name: 'Eliminar' }).click()
+          await page.getByText('Todavía no hay estudios.', { exact: true }).waitFor({ timeout: 10000 })
+
+          await browser.close()
+          EOF
