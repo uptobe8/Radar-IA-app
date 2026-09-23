@@ -1,0 +1,28 @@
+name: Test Radar Cero Study
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/run-study.mjs'
+      - '.github/workflows/test-study.yml'
+
+permissions:
+  contents: read
+\ njobs:
+  run-study:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run study
+        run: node scripts/run-study.mjs
+      - name: Upload study result
+        uses: actions/upload-artifact@v4
+        with:
+          name: radar-cero-study-result
+          path: study-result.json
