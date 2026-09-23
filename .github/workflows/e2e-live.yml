@@ -12,7 +12,7 @@ jobs:
   e2e:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,56 +50,40 @@ jobs:
           await page.evaluate(() => localStorage.clear())
           await page.reload({ waitUntil: 'networkidle', timeout: 120000 })
 
-          const body = await page.locator('body').innerText()
-          if (!body.includes('RADAR CERO')) throw new Error('No aparece RADAR CERO')
-          if (!body.includes('Nuevo estudio')) throw new Error('No aparece Nuevo estudio')
-
           await page.getByLabel('Nombre', { exact: true }).fill('Aitor')
           await page.getByLabel('Primer apellido', { exact: true }).fill('Ruano')
           await page.getByLabel('Segundo apellido', { exact: true }).fill('Pino')
-          const sexSelect = page.locator('select').first()
-          if (await sexSelect.count()) await sexSelect.selectOption('M')
-          await page.getByLabel('Nacimiento aproximado', { exact: true }).fill('20/01/1981')
-          await page.getByLabel('Municipio', { exact: true }).fill('Madrid')
-          await page.getByLabel('Provincia', { exact: true }).fill('Madrid')
-          await page.getByRole('button', { name: 'CREAR ESTUDIO E INVESTIGAR' }).click()
+          await page.getByLabel('Fecha de nacimiento', { exact: true }).fill('20/01/1981')
+          await page.getByLabel('Lugar', { exact: true }).fill('Madrid')
+          await page.getByRole('button', { name: 'CREAR ESTUDIO' }).click()
 
-          await page.waitForFunction(() => {
-            const studies = JSON.parse(localStorage.getItem('radar-cero-studies-v5') || '[]')
-            return studies[0]?.status === 'completed'
-          }, null, { timeout: 360000 })
+          await page.getByText('Aitor Ruano Pino', { exact: true }).first().waitFor()
+          const sourceCards = page.locator('.source-card')
+          if (await sourceCards.count() !== 7) throw new Error('No aparecen las 7 fuentes esperadas')
 
-          const study = await page.evaluate(() => JSON.parse(localStorage.getItem('radar-cero-studies-v5') || '[]')[0])
-          if (!study) throw new Error('No se guardó el estudio')
-          if (!study.runs?.length) throw new Error('No hubo ejecuciones de fuentes')
+          await page.getByRole('button', { name: 'evidencias' }).click()
+          await page.getByLabel('Título / tipo de documento').fill('Registro de prueba verificable')
+          await page.getByLabel('Fecha').fill('20/01/1981')
+          await page.getByLabel('Lugar').fill('Madrid')
+          await page.getByLabel('Personas relacionadas').fill('Aitor Ruano Pino')
+          await page.getByLabel('Parentesco / evento').fill('Nacimiento')
+          await page.getByLabel('URL del documento').fill('https://www.familysearch.org/')
+          await page.getByLabel('Notas').fill('Evidencia de prueba E2E')
+          await page.getByRole('button', { name: 'GUARDAR EVIDENCIA' }).click()
+
+          const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('radar-cero-simple-v1') || 'null'))
+          if (!saved) throw new Error('No se guardó el estudio')
+          if (saved.person?.givenNames !== 'Aitor' || saved.person?.surname1 !== 'Ruano' || saved.person?.surname2 !== 'Pino') throw new Error('Datos de persona incorrectos')
+          if (saved.evidence?.length !== 1) throw new Error('La evidencia no se guardó')
+
+          await page.getByRole('button', { name: 'informe' }).click()
+          const reportText = await page.locator('.report').innerText()
+          if (!reportText.includes('1 evidencias verificables')) throw new Error('El informe no refleja la evidencia')
+          if (!reportText.includes('Registro de prueba verificable')) throw new Error('El informe no muestra la evidencia')
+          if (!reportText.includes('FamilySearch')) throw new Error('El informe no muestra la fuente')
           if (pageErrors.length) throw new Error(`Errores JavaScript: ${pageErrors.join(' | ')}`)
 
-          const sourceSummary = study.runs.map(r => ({
-            source: r.source,
-            sourceId: r.sourceId,
-            status: r.status,
-            hits: r.hits || 0,
-            verifiedHits: r.verifiedHits || 0,
-            error: r.error || '',
-            query: r.query || '',
-            url: r.url || ''
-          }))
-
-          console.log('AITOR_STUDY_OK')
-          console.log(JSON.stringify({
-            title: study.title,
-            status: study.status,
-            root: study.people?.find(p => p.isRoot),
-            runs: study.runs.length,
-            evidence: study.evidence || [],
-            people: study.people || [],
-            relations: study.relations || [],
-            events: study.events || [],
-            places: study.places || [],
-            conflicts: study.conflicts || [],
-            conclusion: study.lastConclusion,
-            sourceSummary
-          }, null, 2))
-
+          console.log('SIMPLE_RADAR_E2E_OK')
+          console.log(JSON.stringify({person:saved.person,evidence:saved.evidence.length,sources:7,report:true}, null, 2))
           await browser.close()
           EOF
