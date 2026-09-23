@@ -1,0 +1,11 @@
+{
+  "name": "Radar Cero",
+  "short_name": "Radar Cero",
+  "description": "Investigación genealógica autónoma con fuentes reales y trazabilidad de evidencias.",
+  "start_url": "/Radar-IA-app/",
+  "scope": "/Radar-IA-app/",
+  "display": "standalone",
+  "background_color": "#07110f",
+  "theme_color": "#07110f",
+  "orientation": "portrait-primary"
+}
