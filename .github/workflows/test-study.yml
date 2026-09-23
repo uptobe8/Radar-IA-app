@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/run-study.mjs'
+      - 'scripts/validate-study-result.mjs'
       - '.github/workflows/test-study.yml'
 
 permissions:
@@ -22,7 +23,10 @@ jobs:
           node-version: '20'
       - name: Run study
         run: node scripts/run-study.mjs
+      - name: Validate study result
+        run: node scripts/validate-study-result.mjs
       - name: Upload study result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: radar-cero-study-result
