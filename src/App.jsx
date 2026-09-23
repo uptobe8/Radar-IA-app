@@ -1,1 +1,1 @@
-export { default } from './RadarCeroApp.jsx'
+export { default } from './RadarCeroV2.jsx'
